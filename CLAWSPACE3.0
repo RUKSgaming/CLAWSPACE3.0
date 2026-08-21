@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CLAWSPACE</title>
+  <style>
+    body {
+      margin: 0;
+      background: #0a0a14;
+      color: #e0ffe0;
+      font-family: Consolas, monospace;
+      overflow: hidden;
+    }
+    #game {
+      position: relative;
+      width: 800px;
+      height: 600px;
+      margin: 20px auto;
+      background: #101020;
+      border: 2px solid #404080;
+    }
+    #player {
+      position: absolute;
+      width: 40px;
+      height: 40px;
+      background: #c0c0ff;
+    }
+    #ui {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+    }
+    #messages {
+      position: absolute;
+      left: 10px;
+      top: 10px;
+      font-size: 14px;
+    }
+    #hint {
+      position: absolute;
+      left: 10px;
+      bottom: 60px;
+      font-size: 14px;
+      color: #a0b0ff;
+    }
+    #inputBar {
+      position: absolute;
+      left: 10px;
+      bottom: 10px;
+      width: 780px;
+      height: 40px;
+      background: #202040;
+      border: 1px solid #5050a0;
+      display: none;
+      align-items: center;
+      padding: 0 10px;
+      box-sizing: border-box;
+    }
+    #inputText {
+      color: #ffffff;
+      font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+  <div id="game">
+    <div id="player"></div>
+    <div id="ui">
+      <div id="messages"></div>
+      <div id="hint">WASD to move. Press Enter to type a keyword.</div>
+      <div id="inputBar"><span>&gt; </span><span id="inputText"></span></div>
+    </div>
+  </div>
+
+  <script>
+    // ============================
+    // DATA: AVATARS & KEYWORDS
+    // ============================
+
+    class Avatar {
+      constructor(name, zone, description) {
+        this.name = name;
+        this.zone = zone;
+        this.description = description;
+      }
+    }
+
+    class Keyword {
+      constructor(phrase, effect) {
+        this.phrase = phrase.toLowerCase();
+        this.effect = effect;
+      }
+    }
+
+    class GameState {
+      constructor() {
+        this.unlockedAvatars = [];
+        this.unlockedZones = [];
+        this.messages = [];
+      }
+
+      unlockAvatar(avatar) {
+        if (!this.unlockedAvatars.includes(avatar.name)) {
+          this.unlockedAvatars.push(avatar.name);
+          this.addMessage(`${avatar.name} has joined your roster.`);
+        }
+        if (avatar.zone && !this.unlockedZones.includes(avatar.zone)) {
+          this.unlockedZones.push(avatar.zone);
+          this.addMessage(`Zone unlocked: ${avatar.zone}`);
+        }
+      }
+
+      addMessage(msg) {
+        this.messages.push(msg);
+        if (this.messages.length > 6) {
+          this.messages.shift();
+        }
+        renderMessages();
+      }
+    }
+
+    const AVATARS = {
+      hatchruks: new Avatar(
+        "Hatchruks, The Creator",
+        "Forge of Origins",
+        "Author of worlds and wielder of Copilot Question."
+      ),
+      nathan: new Avatar(
+        "Nathan, Cosmic Cat",
+        "Hearth of Origins",
+        "Domestic cat elevated to mythic recursion."
+      ),
+      king_banana: new Avatar(
+        "King Banana",
+        "Banana Kingdom",
+        "Absurd fruit monarch of entropy."
+      ),
+      dragon_born: new Avatar(
+        "Dragon Born",
+        "Dragon Spire",
+        "Legendary skyfire bloodline."
+      ),
+      magic_frog: new Avatar(
+        "Magic Frog",
+        "Swamp of Mirrors",
+        "Liminal amphibian who bends probability."
+      ),
+      fish_hunter: new Avatar(
+        "Fish Hunter",
+        "Abyssal Reef",
+        "Predatory aquatic hunter of leviathans."
+      ),
+      quadruped_paradox: new Avatar(
+        "Dog Dog Cat Cat",
+        "Kennel of Mirrors",
+        "Duplication beast of shifting forms."
+      ),
+      bailiff_of_echoes: new Avatar(
+        "Bailiff of Echoes",
+        "Court of Dust",
+        "Arbiter of delayed, corrupted justice."
+      )
+    };
+
+    function unlockAllElementals(state) {
+      const names = [
+        "Fire Cat",
+        "Water Serpent",
+        "Earth Bear",
+        "Air Hawk",
+        "Lightning Wolf",
+        "Shadow Spider"
+      ];
+      names.forEach(name => state.addMessage(`${name} (elemental) awakens.`));
+    }
+
+    const KEYWORDS = [
+      new Keyword("the way you roam is unclear", unlockAllElementals),
+      new Keyword("hatchruks is the creator", s => s.unlockAvatar(AVATARS.hatchruks)),
+      new Keyword("nathan is a cat", s => s.unlockAvatar(AVATARS.nathan)),
+      new Keyword("king banana", s => s.unlockAvatar(AVATARS.king_banana)),
+      new Keyword("dragon born", s => s.unlockAvatar(AVATARS.dragon_born)),
+      new Keyword("magic frog", s => s.unlockAvatar(AVATARS.magic_frog)),
+      new Keyword("fish hunter", s => s.unlockAvatar(AVATARS.fish_hunter)),
+      new Keyword("dog dog cat cat", s => s.unlockAvatar(AVATARS.quadruped_paradox)),
+      new Keyword("second hand justice", s => s.unlockAvatar(AVATARS.bailiff_of_echoes))
+    ];
+
+    function processKeyword(text, state) {
+      const t = text.toLowerCase().trim();
+      for (const kw of KEYWORDS) {
+        if (kw.phrase === t) {
+          kw.effect(state);
+          return;
+        }
+      }
+      state.addMessage("Nothing happens. The keyword echoes into the void.");
+    }
+
+    // ============================
+    // GAME: WASD MOVEMENT + UI
+    // ============================
+
+    const game = document.getElementById("game");
+    const player = document.getElementById("player");
+    const messagesDiv = document.getElementById("messages");
+    const inputBar = document.getElementById("inputBar");
+    const inputTextSpan = document.getElementById("inputText");
+
+    const state = new GameState();
+
+    let playerX = 400;
+    let playerY = 300;
+    const speed = 4;
+
+    let keysDown = {};
+    let inputActive = false;
+    let inputText = "";
+
+    function renderPlayer() {
+      player.style.left = (playerX - 20) + "px";
+      player.style.top = (playerY - 20) + "px";
+    }
+
+    function renderMessages() {
+      messagesDiv.innerHTML = "";
+      state.messages.forEach((msg, i) => {
+        const line = document.createElement("div");
+        line.textContent = msg;
+        line.style.marginBottom = "4px";
+        messagesDiv.appendChild(line);
+      });
+    }
+
+    function gameLoop() {
+      if (!inputActive) {
+        if (keysDown["w"]) playerY -= speed;
+        if (keysDown["s"]) playerY += speed;
+        if (keysDown["a"]) playerX -= speed;
+        if (keysDown["d"]) playerX += speed;
+      }
+      renderPlayer();
+      requestAnimationFrame(gameLoop);
+    }
+
+    window.addEventListener("keydown", e => {
+      if (e.key === "Enter") {
+        if (inputActive) {
+          processKeyword(inputText, state);
+          inputText = "";
+          inputTextSpan.textContent = "";
+          inputActive = false;
+          inputBar.style.display = "none";
+        } else {
+          inputActive = true;
+          inputBar.style.display = "flex";
+        }
+      } else if (inputActive) {
+        if (e.key === "Backspace") {
+          inputText = inputText.slice(0, -1);
+          inputTextSpan.textContent = inputText;
+        } else if (e.key.length === 1) {
+          inputText += e.key;
+          inputTextSpan.textContent = inputText;
+        }
+      } else {
+        if (e.key === "w" || e.key === "W") keysDown["w"] = true;
+        if (e.key === "s" || e.key === "S") keysDown["s"] = true;
+        if (e.key === "a" || e.key === "A") keysDown["a"] = true;
+        if (e.key === "d" || e.key === "D") keysDown["d"] = true;
+      }
+    });
+
+    window.addEventListener("keyup", e => {
+      if (e.key === "w" || e.key === "W") keysDown["w"] = false;
+      if (e.key === "s" || e.key === "S") keysDown["s"] = false;
+      if (e.key === "a" || e.key === "A") keysDown["a"] = false;
+      if (e.key === "d" || e.key === "D") keysDown["d"] = false;
+    });
+
+    renderPlayer();
+    renderMessages();
+    gameLoop();
+  </script>
+</body>
+</html>
