@@ -1,289 +1,140 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-  <meta charset="UTF-8" />
-  <title>CLAWSPACE</title>
+  <meta charset="UTF-8">
+  <title>CLAWSPACE 3D</title>
   <style>
-    body {
-      margin: 0;
-      background: #0a0a14;
-      color: #e0ffe0;
-      font-family: Consolas, monospace;
-      overflow: hidden;
-    }
-    #game {
-      position: relative;
-      width: 800px;
-      height: 600px;
-      margin: 20px auto;
-      background: #101020;
-      border: 2px solid #404080;
-    }
-    #player {
-      position: absolute;
-      width: 40px;
-      height: 40px;
-      background: #c0c0ff;
-    }
+    body { margin: 0; overflow: hidden; font-family: Consolas, monospace; }
     #ui {
-      position: absolute;
-      left: 0;
-      top: 0;
-      width: 100%;
-      height: 100%;
-      pointer-events: none;
-    }
-    #messages {
       position: absolute;
       left: 10px;
       top: 10px;
-      font-size: 14px;
-    }
-    #hint {
-      position: absolute;
-      left: 10px;
-      bottom: 60px;
-      font-size: 14px;
-      color: #a0b0ff;
+      color: white;
+      font-size: 16px;
+      z-index: 10;
     }
     #inputBar {
       position: absolute;
-      left: 10px;
       bottom: 10px;
-      width: 780px;
+      left: 10px;
+      width: 400px;
       height: 40px;
-      background: #202040;
-      border: 1px solid #5050a0;
+      background: rgba(0,0,0,0.6);
+      border: 1px solid #aaa;
+      padding: 5px;
       display: none;
-      align-items: center;
-      padding: 0 10px;
-      box-sizing: border-box;
-    }
-    #inputText {
-      color: #ffffff;
-      font-size: 16px;
+      color: white;
+      font-size: 18px;
     }
   </style>
 </head>
 <body>
-  <div id="game">
-    <div id="player"></div>
-    <div id="ui">
-      <div id="messages"></div>
-      <div id="hint">WASD to move. Press Enter to type a keyword.</div>
-      <div id="inputBar"><span>&gt; </span><span id="inputText"></span></div>
-    </div>
-  </div>
 
-  <script>
-    // ============================
-    // DATA: AVATARS & KEYWORDS
-    // ============================
+<div id="ui">
+  <div id="messages"></div>
+</div>
 
-    class Avatar {
-      constructor(name, zone, description) {
-        this.name = name;
-        this.zone = zone;
-        this.description = description;
-      }
-    }
+<div id="inputBar">&gt; <span id="inputText"></span></div>
 
-    class Keyword {
-      constructor(phrase, effect) {
-        this.phrase = phrase.toLowerCase();
-        this.effect = effect;
-      }
-    }
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 
-    class GameState {
-      constructor() {
-        this.unlockedAvatars = [];
-        this.unlockedZones = [];
-        this.messages = [];
-      }
+<script>
+/* ============================================================
+   SCENE + CAMERA + RENDERER
+   ============================================================ */
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87CEEB);
 
-      unlockAvatar(avatar) {
-        if (!this.unlockedAvatars.includes(avatar.name)) {
-          this.unlockedAvatars.push(avatar.name);
-          this.addMessage(`${avatar.name} has joined your roster.`);
-        }
-        if (avatar.zone && !this.unlockedZones.includes(avatar.zone)) {
-          this.unlockedZones.push(avatar.zone);
-          this.addMessage(`Zone unlocked: ${avatar.zone}`);
-        }
-      }
+const camera = new THREE.PerspectiveCamera(
+  75, window.innerWidth / window.innerHeight, 0.1, 1000
+);
 
-      addMessage(msg) {
-        this.messages.push(msg);
-        if (this.messages.length > 6) {
-          this.messages.shift();
-        }
-        renderMessages();
-      }
-    }
+const renderer = new THREE.WebGLRenderer();
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
 
-    const AVATARS = {
-      hatchruks: new Avatar(
-        "Hatchruks, The Creator",
-        "Forge of Origins",
-        "Author of worlds and wielder of Copilot Question."
-      ),
-      nathan: new Avatar(
-        "Nathan, Cosmic Cat",
-        "Hearth of Origins",
-        "Domestic cat elevated to mythic recursion."
-      ),
-      king_banana: new Avatar(
-        "King Banana",
-        "Banana Kingdom",
-        "Absurd fruit monarch of entropy."
-      ),
-      dragon_born: new Avatar(
-        "Dragon Born",
-        "Dragon Spire",
-        "Legendary skyfire bloodline."
-      ),
-      magic_frog: new Avatar(
-        "Magic Frog",
-        "Swamp of Mirrors",
-        "Liminal amphibian who bends probability."
-      ),
-      fish_hunter: new Avatar(
-        "Fish Hunter",
-        "Abyssal Reef",
-        "Predatory aquatic hunter of leviathans."
-      ),
-      quadruped_paradox: new Avatar(
-        "Dog Dog Cat Cat",
-        "Kennel of Mirrors",
-        "Duplication beast of shifting forms."
-      ),
-      bailiff_of_echoes: new Avatar(
-        "Bailiff of Echoes",
-        "Court of Dust",
-        "Arbiter of delayed, corrupted justice."
-      )
-    };
+/* ============================================================
+   LIGHT
+   ============================================================ */
+const light = new THREE.DirectionalLight(0xffffff, 1);
+light.position.set(50, 100, 50);
+scene.add(light);
 
-    function unlockAllElementals(state) {
-      const names = [
-        "Fire Cat",
-        "Water Serpent",
-        "Earth Bear",
-        "Air Hawk",
-        "Lightning Wolf",
-        "Shadow Spider"
-      ];
-      names.forEach(name => state.addMessage(`${name} (elemental) awakens.`));
-    }
+/* ============================================================
+   GROUND (Palworld-style open field)
+   ============================================================ */
+const groundGeo = new THREE.PlaneGeometry(1000, 1000, 50, 50);
+const groundMat = new THREE.MeshLambertMaterial({ color: 0x55aa55 });
+const ground = new THREE.Mesh(groundGeo, groundMat);
+ground.rotation.x = -Math.PI / 2;
+scene.add(ground);
 
-    const KEYWORDS = [
-      new Keyword("the way you roam is unclear", unlockAllElementals),
-      new Keyword("hatchruks is the creator", s => s.unlockAvatar(AVATARS.hatchruks)),
-      new Keyword("nathan is a cat", s => s.unlockAvatar(AVATARS.nathan)),
-      new Keyword("king banana", s => s.unlockAvatar(AVATARS.king_banana)),
-      new Keyword("dragon born", s => s.unlockAvatar(AVATARS.dragon_born)),
-      new Keyword("magic frog", s => s.unlockAvatar(AVATARS.magic_frog)),
-      new Keyword("fish hunter", s => s.unlockAvatar(AVATARS.fish_hunter)),
-      new Keyword("dog dog cat cat", s => s.unlockAvatar(AVATARS.quadruped_paradox)),
-      new Keyword("second hand justice", s => s.unlockAvatar(AVATARS.bailiff_of_echoes))
-    ];
+/* ============================================================
+   AVATARS
+   ============================================================ */
+const avatars = [
+  { name: "Dragon Born", color: 0xff4444, power: "fire" },
+  { name: "Magic Frog", color: 0x44ff44, power: "jump" },
+  { name: "Nathan", color: 0x4444ff, power: "speed" },
+  { name: "Fish Hunter", color: 0x00ffff, power: "dash" },
+  { name: "King Banana", color: 0xffdd00, power: "banana" },
+  { name: "Dog Dog Cat Cat", color: 0xff00ff, power: "clone" },
+  { name: "Bailiff of Echoes", color: 0xffffff, power: "echo" }
+];
 
-    function processKeyword(text, state) {
-      const t = text.toLowerCase().trim();
-      for (const kw of KEYWORDS) {
-        if (kw.phrase === t) {
-          kw.effect(state);
-          return;
-        }
-      }
-      state.addMessage("Nothing happens. The keyword echoes into the void.");
-    }
+let currentAvatarIndex = 0;
 
-    // ============================
-    // GAME: WASD MOVEMENT + UI
-    // ============================
+/* ============================================================
+   PLAYER MODEL
+   ============================================================ */
+const playerGeo = new THREE.CapsuleGeometry(0.5, 1.5, 4, 8);
+const playerMat = new THREE.MeshLambertMaterial({
+  color: avatars[currentAvatarIndex].color
+});
+const player = new THREE.Mesh(playerGeo, playerMat);
+player.position.set(0, 1, 5);
+scene.add(player);
 
-    const game = document.getElementById("game");
-    const player = document.getElementById("player");
-    const messagesDiv = document.getElementById("messages");
-    const inputBar = document.getElementById("inputBar");
-    const inputTextSpan = document.getElementById("inputText");
+camera.position.set(0, 2, 10);
 
-    const state = new GameState();
+/* ============================================================
+   MOVEMENT
+   ============================================================ */
+const keys = {};
+document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
 
-    let playerX = 400;
-    let playerY = 300;
-    const speed = 4;
+/* ============================================================
+   UI + MESSAGES
+   ============================================================ */
+const messagesDiv = document.getElementById("messages");
+function addMessage(msg) {
+  const line = document.createElement("div");
+  line.textContent = msg;
+  messagesDiv.appendChild(line);
+  if (messagesDiv.children.length > 6) {
+    messagesDiv.removeChild(messagesDiv.children[0]);
+  }
+}
 
-    let keysDown = {};
-    let inputActive = false;
-    let inputText = "";
+/* ============================================================
+   KEYWORD SYSTEM
+   ============================================================ */
+const inputBar = document.getElementById("inputBar");
+const inputTextSpan = document.getElementById("inputText");
+let inputActive = false;
+let inputText = "";
 
-    function renderPlayer() {
-      player.style.left = (playerX - 20) + "px";
-      player.style.top = (playerY - 20) + "px";
-    }
+const KEYWORDS = {
+  "dragon born": () => switchAvatar("Dragon Born"),
+  "magic frog": () => switchAvatar("Magic Frog"),
+  "nathan is a cat": () => switchAvatar("Nathan"),
+  "fish hunter": () => switchAvatar("Fish Hunter"),
+  "king banana": () => switchAvatar("King Banana"),
+  "dog dog cat cat": () => switchAvatar("Dog Dog Cat Cat"),
+  "second hand justice": () => switchAvatar("Bailiff of Echoes")
+};
 
-    function renderMessages() {
-      messagesDiv.innerHTML = "";
-      state.messages.forEach((msg, i) => {
-        const line = document.createElement("div");
-        line.textContent = msg;
-        line.style.marginBottom = "4px";
-        messagesDiv.appendChild(line);
-      });
-    }
-
-    function gameLoop() {
-      if (!inputActive) {
-        if (keysDown["w"]) playerY -= speed;
-        if (keysDown["s"]) playerY += speed;
-        if (keysDown["a"]) playerX -= speed;
-        if (keysDown["d"]) playerX += speed;
-      }
-      renderPlayer();
-      requestAnimationFrame(gameLoop);
-    }
-
-    window.addEventListener("keydown", e => {
-      if (e.key === "Enter") {
-        if (inputActive) {
-          processKeyword(inputText, state);
-          inputText = "";
-          inputTextSpan.textContent = "";
-          inputActive = false;
-          inputBar.style.display = "none";
-        } else {
-          inputActive = true;
-          inputBar.style.display = "flex";
-        }
-      } else if (inputActive) {
-        if (e.key === "Backspace") {
-          inputText = inputText.slice(0, -1);
-          inputTextSpan.textContent = inputText;
-        } else if (e.key.length === 1) {
-          inputText += e.key;
-          inputTextSpan.textContent = inputText;
-        }
-      } else {
-        if (e.key === "w" || e.key === "W") keysDown["w"] = true;
-        if (e.key === "s" || e.key === "S") keysDown["s"] = true;
-        if (e.key === "a" || e.key === "A") keysDown["a"] = true;
-        if (e.key === "d" || e.key === "D") keysDown["d"] = true;
-      }
-    });
-
-    window.addEventListener("keyup", e => {
-      if (e.key === "w" || e.key === "W") keysDown["w"] = false;
-      if (e.key === "s" || e.key === "S") keysDown["s"] = false;
-      if (e.key === "a" || e.key === "A") keysDown["a"] = false;
-      if (e.key === "d" || e.key === "D") keysDown["d"] = false;
-    });
-
-    renderPlayer();
-    renderMessages();
-    gameLoop();
-  </script>
-</body>
-</html>
+function processKeyword(text) {
+  const t = text.toLowerCase().trim();
+  if (KEYWORDS
